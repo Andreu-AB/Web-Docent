@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="ca" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Web Docent — Correcció Intel·ligent d'Exàmens</title>
+  <meta name="description" content="Eina per a docents que automatitza el feedback d'exàmens amb IA preservant la privacitat." />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+
+  <style>
+    :root {
+      --bg-base:   #0d0d18;
+      --bg-card:   #13131f;
+      --bg-card2:  #191928;
+      --border:    rgba(255,255,255,0.07);
+      --muted:     rgba(255,255,255,0.42);
+      --c-orange:  #ff7b54;
+      --c-yellow:  #ffd166;
+      --c-green:   #06d6a0;
+      --c-blue:    #4cc9f0;
+      --c-purple:  #b388ff;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin:0; padding:0; min-height:100vh; background:var(--bg-base); color:#fff; font-family:'Plus Jakarta Sans',sans-serif; overflow-x:hidden; }
+
+    /* ── BG ORBS ── */
+    .bg-orbs { position:fixed; inset:0; pointer-events:none; z-index:0; overflow:hidden; }
+    .orb { position:absolute; border-radius:50%; filter:blur(90px); opacity:.16; animation:float 14s ease-in-out infinite alternate; }
+    .orb-1 { width:520px;height:520px;background:radial-gradient(circle,#7b2ff7,transparent);top:-180px;left:-120px;animation-duration:16s; }
+    .orb-2 { width:420px;height:420px;background:radial-gradient(circle,#ff7b54,transparent);top:25%;right:-130px;animation-duration:13s;animation-delay:-5s; }
+    .orb-3 { width:460px;height:460px;background:radial-gradient(circle,#4cc9f0,transparent);bottom:-120px;left:15%;animation-duration:19s;animation-delay:-9s; }
+    .orb-4 { width:320px;height:320px;background:radial-gradient(circle,#06d6a0,transparent);top:55%;left:55%;animation-duration:11s;animation-delay:-3s; }
+    @keyframes float { from{transform:translate(0,0) scale(1)} to{transform:translate(28px,-36px) scale(1.07)} }
+
+    /* ── LAYOUT ── */
+    .page { position:relative; z-index:1; max-width:960px; margin:0 auto; padding:0 24px 80px; }
+
+    /* ── HEADER ── */
+    header { position:sticky;top:0;z-index:100;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);background:rgba(13,13,24,.82);border-bottom:1px solid var(--border); }
+    .header-inner { max-width:960px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;justify-content:space-between; }
+    .logo-mark { width:42px;height:42px;border-radius:14px;background:linear-gradient(135deg,#7b2ff7,#ff7b54);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;color:#fff;box-shadow:0 0 24px rgba(123,47,247,.5); }
+    .logo-text { font-size:17px;font-weight:800;letter-spacing:-.5px; }
+    .logo-text span { background:linear-gradient(90deg,#b388ff,#ff7b54);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text; }
+    .status-pill { display:flex;align-items:center;gap:7px;background:rgba(6,214,160,.1);border:1px solid rgba(6,214,160,.25);border-radius:100px;padding:5px 14px;font-size:12px;color:#06d6a0;font-weight:600; }
+    .status-dot { width:7px;height:7px;background:#06d6a0;border-radius:50%;animation:pg 2s infinite; }
+    @keyframes pg { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.8)} }
+
+    /* ── HERO ── */
+    .hero { text-align:center;padding:52px 0 40px; }
+    .hero-badge { display:inline-flex;align-items:center;gap:8px;background:rgba(179,136,255,.1);border:1px solid rgba(179,136,255,.25);border-radius:100px;padding:6px 18px;font-size:12px;font-weight:700;color:var(--c-purple);text-transform:uppercase;letter-spacing:1px;margin-bottom:24px; }
+    .hero h1 { font-size:clamp(34px,5.5vw,54px);font-weight:900;line-height:1.1;letter-spacing:-2px;margin:0 0 18px; }
+    .hero h1 .hl { background:linear-gradient(90deg,#ff7b54,#ffd166,#06d6a0);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text; }
+    .hero p { font-size:16px;color:var(--muted);max-width:500px;margin:0 auto;line-height:1.7; }
+    .hero-pills { display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:20px; }
+    .pill { display:flex;align-items:center;gap:6px;background:var(--bg-card);border:1px solid var(--border);border-radius:100px;padding:5px 14px;font-size:12px;font-weight:600;color:var(--muted); }
+    .pill-dot { width:6px;height:6px;border-radius:50%; }
+
+    /* ── CARD ── */
+    .card { background:var(--bg-card);border:1px solid var(--border);border-radius:24px;padding:32px; }
+
+    /* ── MODEL BTNS ── */
+    .section-label { font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:10px;display:flex;align-items:center;gap:8px; }
+    .model-row { display:flex;gap:8px;flex-wrap:wrap;margin-bottom:28px; }
+    .model-btn { display:flex;align-items:center;gap:7px;padding:8px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg-card2);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;font-family:inherit; }
+    .model-btn:hover { border-color:rgba(179,136,255,.4);color:var(--c-purple);background:rgba(179,136,255,.07); }
+    .model-btn.active { border-color:var(--c-purple);color:var(--c-purple);background:rgba(179,136,255,.12);box-shadow:0 0 18px rgba(179,136,255,.15); }
+    .speed-tag { font-size:9px;border-radius:6px;padding:2px 6px;font-weight:800; }
+    .speed-fast   { background:rgba(6,214,160,.15);  color:var(--c-green); }
+    .speed-medium { background:rgba(255,209,102,.15);color:var(--c-yellow); }
+    .speed-slow   { background:rgba(255,123,84,.15); color:var(--c-orange); }
+
+    /* ── FIELDS ── */
+    .fields-grid { display:grid;grid-template-columns:1fr 1fr;gap:24px; }
+    @media(max-width:660px){ .fields-grid{ grid-template-columns:1fr; } }
+
+    .field-wrap { display:flex;flex-direction:column;gap:10px; }
+    .field-header { display:flex;align-items:center;justify-content:space-between; }
+    .field-label-row { display:flex;align-items:center;gap:9px; }
+    .field-icon { width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px; }
+    .field-title { font-size:14px;font-weight:800; }
+    .word-badge { font-size:11px;font-weight:700;color:var(--muted);background:var(--bg-card2);border:1px solid var(--border);border-radius:8px;padding:3px 10px;transition:all .3s; }
+    .word-badge.has-words { color:var(--c-purple);border-color:rgba(179,136,255,.25);background:rgba(179,136,255,.08); }
+
+    /* ── INPUT ZONE (el contenedor grande) ── */
+    .input-zone {
+      border-radius:16px;
+      border:2px solid rgba(255,255,255,.09);
+      background:var(--bg-card2);
+      transition:border-color .2s, box-shadow .2s, background .2s;
+      position:relative;
+      min-height:280px;
+      display:flex;
+      flex-direction:column;
+    }
+    .input-zone:focus-within {
+      border-color:rgba(179,136,255,.5);
+      box-shadow:0 0 0 4px rgba(179,136,255,.07);
+    }
+    .input-zone.drag-over {
+      border-color:var(--c-purple) !important;
+      background:rgba(179,136,255,.07) !important;
+      box-shadow:0 0 0 5px rgba(179,136,255,.12) !important;
+    }
+
+    /* Overlay drag */
+    .drag-overlay {
+      display:none;
+      position:absolute;inset:0;border-radius:14px;z-index:20;
+      background:rgba(30,20,60,.7);backdrop-filter:blur(6px);
+      flex-direction:column;align-items:center;justify-content:center;gap:10px;
+      pointer-events:none;
+    }
+    .input-zone.drag-over .drag-overlay { display:flex; }
+    .drag-icon { font-size:52px;animation:bncIcon .55s ease-in-out infinite alternate; }
+    @keyframes bncIcon { from{transform:translateY(0)} to{transform:translateY(-10px)} }
+    .drag-label { font-size:17px;font-weight:800;color:var(--c-purple); }
+    .drag-sub   { font-size:13px;color:rgba(179,136,255,.65);font-weight:600; }
+
+    /* ── MODO TEXTO (textarea visible) ── */
+    .mode-text { display:flex;flex-direction:column;flex:1; }
+
+    /* Placeholder visual (fondo del textarea cuando vacío) */
+    .text-placeholder {
+      position:absolute;top:0;left:0;right:0;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+      padding:40px 20px;
+      pointer-events:none;
+      transition:opacity .2s;
+    }
+    .text-placeholder.hidden { opacity:0; }
+    .ph-icon  { font-size:38px;opacity:.28; }
+    .ph-title { font-size:14px;font-weight:800;color:rgba(255,255,255,.25); }
+    .ph-sub   { font-size:12px;color:rgba(255,255,255,.18);font-weight:600; }
+    .ph-tags  { display:flex;gap:6px;margin-top:4px; }
+    .ph-tag   { font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px;border:1px solid rgba(255,255,255,.09);color:rgba(255,255,255,.22); }
+
+    textarea.main-ta {
+      flex:1;width:100%;min-height:220px;
+      background:transparent;border:none;
+      color:rgba(255,255,255,.88);font-family:'Plus Jakarta Sans',sans-serif;
+      font-size:14px;line-height:1.8;
+      padding:18px 20px;
+      resize:none;
+      text-align:justify; hyphens:auto; -webkit-hyphens:auto;
+      position:relative;z-index:2;
+    }
+    textarea.main-ta:focus { outline:none; }
+
+    /* ── MODO FITXER (quan hi ha fitxer adjunt) ── */
+    .mode-file { display:none;flex:1;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:0; }
+
+    /* Targeta del fitxer */
+    .file-card {
+      width:100%;background:rgba(0,0,0,.25);
+      border:1px solid rgba(255,255,255,.1);
+      border-radius:14px;padding:20px 22px;
+      display:flex;align-items:center;gap:16px;
+    }
+    .file-type-icon {
+      width:52px;height:52px;border-radius:12px;
+      display:flex;align-items:center;justify-content:center;
+      font-size:26px;flex-shrink:0;
+    }
+    .file-info { flex:1;min-width:0; }
+    .file-name { font-size:15px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px; }
+    .file-meta { display:flex;gap:10px;flex-wrap:wrap; }
+    .file-meta-item { font-size:11px;font-weight:700;padding:3px 9px;border-radius:7px;border:1px solid rgba(255,255,255,.09);color:var(--muted); }
+    .file-meta-item.words { color:var(--c-green);background:rgba(6,214,160,.09);border-color:rgba(6,214,160,.2); }
+
+    .file-status {
+      margin-top:16px;width:100%;
+      display:flex;align-items:center;gap:8px;
+      font-size:12px;font-weight:700;color:rgba(255,255,255,.35);
+    }
+    .file-status-dot { width:6px;height:6px;border-radius:50%;background:var(--c-green);animation:pg 2s infinite; }
+
+    /* ── FOOTER de la zona (comú) ── */
+    .zone-footer {
+      border-top:1px solid var(--border);
+      padding:10px 16px 12px;
+      display:flex;align-items:center;gap:10px;
+      flex-shrink:0;z-index:2;
+    }
+    .btn-attach {
+      display:flex;align-items:center;gap:6px;
+      font-size:12px;font-weight:700;cursor:pointer;
+      background:rgba(179,136,255,.1);border:1px solid rgba(179,136,255,.2);
+      color:var(--c-purple);border-radius:9px;padding:6px 12px;
+      transition:all .2s;font-family:inherit;
+    }
+    .btn-attach:hover { background:rgba(179,136,255,.18); }
+    .btn-clear {
+      display:none;align-items:center;gap:6px;
+      font-size:12px;font-weight:700;cursor:pointer;
+      background:rgba(255,123,84,.1);border:1px solid rgba(255,123,84,.2);
+      color:var(--c-orange);border-radius:9px;padding:6px 12px;
+      transition:all .2s;font-family:inherit;
+    }
+    .btn-clear:hover { background:rgba(255,123,84,.18); }
+    .footer-hint { font-size:11px;color:rgba(255,255,255,.2);font-weight:600;margin-left:auto; }
+
+    /* ── SUBMIT ── */
+    .submit-wrap { display:flex;justify-content:center;margin-top:28px; }
+    .btn-main {
+      display:flex;align-items:center;gap:10px;
+      background:linear-gradient(135deg,#7b2ff7 0%,#ff7b54 100%);
+      color:#fff;border:none;cursor:pointer;
+      font-size:16px;font-weight:800;letter-spacing:-.3px;
+      padding:16px 44px;border-radius:18px;
+      box-shadow:0 8px 32px rgba(123,47,247,.35);
+      transition:all .25s;font-family:inherit;position:relative;overflow:hidden;
+    }
+    .btn-main::before { content:'';position:absolute;inset:0;background:linear-gradient(135deg,#ff7b54 0%,#7b2ff7 100%);opacity:0;transition:opacity .3s; }
+    .btn-main:hover:not(:disabled)::before { opacity:1; }
+    .btn-main:hover:not(:disabled) { transform:translateY(-3px);box-shadow:0 16px 44px rgba(123,47,247,.45); }
+    .btn-main:disabled { opacity:.55;cursor:not-allowed; }
+    .btn-main > * { position:relative;z-index:1; }
+    .privacy-note { text-align:center;margin-top:12px;font-size:12px;color:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;gap:6px; }
+
+    /* ── LOADING ── */
+    #loading-section { display:none;text-align:center;padding:100px 0; }
+    .loading-emoji { font-size:40px;animation:bncIcon .8s ease-in-out infinite alternate;margin-bottom:20px; }
+    .loader-ring { width:72px;height:72px;border-radius:50%;margin:0 auto 28px;border:3px solid rgba(255,255,255,.04);border-top-color:var(--c-purple);border-right-color:var(--c-orange);animation:spin 1s linear infinite; }
+    @keyframes spin { to{transform:rotate(360deg)} }
+    .loading-title { font-size:24px;font-weight:900;letter-spacing:-.5px;margin-bottom:8px; }
+    .loading-sub   { font-size:14px;color:var(--muted); }
+    .loading-bar-wrap { width:220px;height:4px;background:rgba(255,255,255,.06);border-radius:100px;margin:20px auto 0;overflow:hidden; }
+    .loading-bar { height:100%;background:linear-gradient(90deg,var(--c-purple),var(--c-orange));border-radius:100px;animation:lbar 2s ease-in-out infinite alternate; }
+    @keyframes lbar { from{width:8%} to{width:92%} }
+
+    /* ── RESULTS ── */
+    #results-section { display:none; }
+    .results-header { display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px; }
+    .results-title { font-size:24px;font-weight:900;letter-spacing:-.5px; }
+    .results-meta { display:flex;align-items:center;gap:10px; }
+    .meta-badge { font-size:12px;font-weight:700;padding:5px 13px;border-radius:100px;background:rgba(179,136,255,.12);border:1px solid rgba(179,136,255,.25);color:var(--c-purple); }
+    .btn-back { display:flex;align-items:center;gap:7px;font-size:13px;font-weight:700;cursor:pointer;background:var(--bg-card);border:1.5px solid var(--border);color:var(--muted);padding:8px 16px;border-radius:12px;transition:all .2s;font-family:inherit; }
+    .btn-back:hover { border-color:rgba(255,255,255,.15);color:#fff; }
+
+    .nota-card { border-radius:22px;padding:36px 32px;text-align:center;margin-bottom:18px;position:relative;overflow:hidden; }
+    .nota-card::before { content:'';position:absolute;inset:0;background:radial-gradient(ellipse at top,rgba(255,255,255,.09),transparent 60%); }
+    .nota-label  { font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:2px;opacity:.65;margin-bottom:10px; }
+    .nota-number { font-size:80px;font-weight:900;line-height:1;letter-spacing:-5px; }
+    .nota-denom  { font-size:32px;font-weight:600;opacity:.55; }
+    .nota-emoji  { font-size:30px;margin-top:10px; }
+    .nota-alta  { background:linear-gradient(135deg,#064e3b,#059669);border:1px solid rgba(6,214,160,.3); }
+    .nota-mitja { background:linear-gradient(135deg,#78350f,#d97706);border:1px solid rgba(251,191,36,.3); }
+    .nota-baixa { background:linear-gradient(135deg,#7f1d1d,#dc2626);border:1px solid rgba(248,113,113,.3); }
+
+    .results-grid { display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px; }
+    @media(max-width:560px){ .results-grid{ grid-template-columns:1fr; } }
+    .res-card { background:var(--bg-card);border:1px solid var(--border);border-radius:20px;padding:24px;transition:transform .2s,border-color .2s; }
+    .res-card:hover { transform:translateY(-2px);border-color:rgba(255,255,255,.11); }
+    .res-card-header { display:flex;align-items:center;gap:10px;margin-bottom:16px; }
+    .res-card-icon { width:36px;height:36px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0; }
+    .res-card-title { font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px; }
+    .card-green .res-card-icon { background:rgba(6,214,160,.14); }
+    .card-green .res-card-title { color:var(--c-green); }
+    .card-orange .res-card-icon { background:rgba(255,123,84,.14); }
+    .card-orange .res-card-title { color:var(--c-orange); }
+    .res-list { list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px; }
+    .res-item { display:flex;align-items:flex-start;gap:9px;font-size:14px;color:rgba(255,255,255,.75);line-height:1.65;text-align:justify; }
+    .res-bullet { width:22px;height:22px;border-radius:7px;flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800; }
+    .bullet-green  { background:rgba(6,214,160,.14);  color:var(--c-green); }
+    .bullet-orange { background:rgba(255,123,84,.14); color:var(--c-orange); }
+
+    .resum-card { background:var(--bg-card);border:1px solid var(--border);border-radius:20px;padding:24px;margin-bottom:16px; }
+    .resum-text { font-size:15px;line-height:1.85;color:rgba(255,255,255,.75);text-align:justify; }
+
+    .consell-card { border-radius:20px;padding:28px;background:linear-gradient(135deg,rgba(76,201,240,.09),rgba(123,47,247,.09));border:1px solid rgba(76,201,240,.2);position:relative;overflow:hidden;margin-bottom:24px; }
+    .consell-card::after { content:'✨';position:absolute;right:20px;bottom:16px;font-size:44px;opacity:.12; }
+    .consell-header { display:flex;align-items:center;gap:10px;margin-bottom:12px; }
+    .consell-icon  { width:36px;height:36px;border-radius:12px;background:rgba(76,201,240,.14);display:flex;align-items:center;justify-content:center;font-size:18px; }
+    .consell-title { font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--c-blue); }
+    .consell-text  { font-size:16px;line-height:1.8;color:rgba(255,255,255,.85);font-style:italic;font-weight:500;text-align:justify; }
+
+    .cta-new { text-align:center;padding:26px;background:var(--bg-card);border:1.5px dashed rgba(255,255,255,.1);border-radius:20px;cursor:pointer;transition:all .2s;font-family:inherit;color:var(--muted);font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:10px;width:100%; }
+    .cta-new:hover { border-color:rgba(179,136,255,.3);color:var(--c-purple);background:rgba(179,136,255,.05);transform:translateY(-2px); }
+
+    /* ── TOAST ── */
+    #toast-container { position:fixed;top:76px;right:18px;z-index:999;display:flex;flex-direction:column;gap:8px; }
+    .toast { padding:12px 18px;border-radius:14px;font-size:14px;font-weight:600;backdrop-filter:blur(12px);border:1px solid;animation:tIn .3s ease-out both;max-width:320px; }
+    .toast-error   { background:rgba(220,38,38,.2);  border-color:rgba(220,38,38,.35);  color:#fca5a5; }
+    .toast-success { background:rgba(6,214,160,.15); border-color:rgba(6,214,160,.3);   color:#6ee7b7; }
+    .toast-info    { background:rgba(76,201,240,.12);border-color:rgba(76,201,240,.3);  color:#7dd3fc; }
+    @keyframes tIn { from{opacity:0;transform:translateX(14px)} to{opacity:1;transform:translateX(0)} }
+
+    /* ── ANIMS ── */
+    .anim-fade-in  { animation:aFI .5s ease-out both; }
+    .anim-slide-up { animation:aSU .5s ease-out both; }
+    @keyframes aFI { from{opacity:0} to{opacity:1} }
+    @keyframes aSU { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+    .d1{animation-delay:.05s} .d2{animation-delay:.10s} .d3{animation-delay:.15s}
+
+    ::-webkit-scrollbar { width:5px; }
+    ::-webkit-scrollbar-track { background:var(--bg-base); }
+    ::-webkit-scrollbar-thumb { background:#2a2a40;border-radius:10px; }
+    footer { position:relative;z-index:1;text-align:center;padding:20px;font-size:12px;color:rgba(255,255,255,.15); }
+  </style>
+</head>
+<body>
+  <div class="bg-orbs">
+    <div class="orb orb-1"></div><div class="orb orb-2"></div>
+    <div class="orb orb-3"></div><div class="orb orb-4"></div>
+  </div>
+  <div id="toast-container"></div>
+
+  <!-- HEADER -->
+  <header>
+    <div class="header-inner">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div class="logo-mark">W</div>
+        <div>
+          <div class="logo-text"><span>Web Docent</span></div>
+          <div style="font-size:11px;color:var(--muted);font-weight:600;">Correcció intel·ligent</div>
+        </div>
+      </div>
+      <div class="status-pill"><div class="status-dot"></div>Servei actiu</div>
+    </div>
+  </header>
+
+  <div class="page">
+
+    <!-- HERO -->
+    <section class="hero anim-fade-in">
+      <div class="hero-badge">🎓 Eina per a docents · IA generativa</div>
+      <h1>Feedback de qualitat,<br><span class="hl">sense perdre el temps.</span></h1>
+      <p>Adjunta o escriu la rúbrica i la resposta de l'alumne. La IA genera un informe motivador en català.</p>
+      <div class="hero-pills">
+        <div class="pill"><span class="pill-dot" style="background:var(--c-green)"></span>Privacitat garantida</div>
+        <div class="pill"><span class="pill-dot" style="background:var(--c-blue)"></span>100% local</div>
+        <div class="pill"><span class="pill-dot" style="background:var(--c-orange)"></span>PDF · Word · Text</div>
+        <div class="pill"><span class="pill-dot" style="background:var(--c-purple)"></span>Multi-model Gemini</div>
+      </div>
+    </section>
+
+    <!-- FORMULARI -->
+    <section id="form-section" class="anim-slide-up">
+      <div class="card">
+
+        <!-- Model selector -->
+        <div style="margin-bottom:26px;">
+          <div class="section-label">🤖 &nbsp;Model de IA</div>
+          <div class="model-row" id="model-row"></div>
+        </div>
+
+        <!-- Camps -->
+        <div class="fields-grid">
+
+          <!-- ── RÚBRICA ── -->
+          <div class="field-wrap">
+            <div class="field-header">
+              <div class="field-label-row">
+                <div class="field-icon" style="background:rgba(76,201,240,.12);">📋</div>
+                <span class="field-title">Rúbrica / Criteris</span>
+              </div>
+              <span class="word-badge" id="rubrica-count">0 paraules</span>
+            </div>
+
+            <div class="input-zone" id="iz-rubrica"
+              ondragover="onDragOver(event,'iz-rubrica')"
+              ondragleave="onDragLeave('iz-rubrica')"
+              ondrop="onDrop(event,'iz-rubrica','rubrica')">
+
+              <!-- Drag overlay -->
+              <div class="drag-overlay">
+                <div class="drag-icon">📂</div>
+                <div class="drag-label">Deixa anar el fitxer</div>
+                <div class="drag-sub">PDF · DOCX · TXT</div>
+              </div>
+
+              <!-- MODE TEXT -->
+              <div class="mode-text" id="mt-rubrica">
+                <div class="text-placeholder" id="ph-rubrica">
+                  <div class="ph-icon">📋</div>
+                  <div class="ph-title">Escriu o enganxa aquí</div>
+                  <div class="ph-sub">o arrossega / adjunta un fitxer</div>
+                  <div class="ph-tags">
+                    <span class="ph-tag">PDF</span>
+                    <span class="ph-tag">DOCX</span>
+                    <span class="ph-tag">TXT</span>
+                  </div>
+                </div>
+                <textarea class="main-ta" id="rubrica"
+                  oninput="onTypeText('rubrica','rubrica-count','ph-rubrica')"></textarea>
+              </div>
+
+              <!-- MODE FITXER -->
+              <div class="mode-file" id="mf-rubrica">
+                <div class="file-card" id="fc-rubrica">
+                  <div class="file-type-icon" id="fti-rubrica"></div>
+                  <div class="file-info">
+                    <div class="file-name" id="fn-rubrica">—</div>
+                    <div class="file-meta">
+                      <span class="file-meta-item" id="fs-rubrica"></span>
+                      <span class="file-meta-item words" id="fw-rubrica"></span>
+                    </div>
+                  </div>
+                </div>
+                <div class="file-status">
+                  <div class="file-status-dot"></div>
+                  Fitxer llegit · contingut enviat a la IA internament
+                </div>
+              </div>
+
+              <!-- Footer -->
+              <div class="zone-footer">
+                <button class="btn-attach" onclick="triggerPick('fp-rubrica')">📎 Adjuntar fitxer</button>
+                <button class="btn-clear" id="bc-rubrica" onclick="clearZone('iz-rubrica','rubrica','rubrica-count','ph-rubrica')">✕ Treure</button>
+                <span class="footer-hint" id="fh-rubrica">arrossega o adjunta</span>
+              </div>
+              <input type="file" id="fp-rubrica" accept=".txt,.pdf,.docx,.doc" style="display:none"
+                onchange="onFilePick(event,'iz-rubrica','rubrica','rubrica-count','ph-rubrica')">
+            </div>
+          </div>
+
+          <!-- ── TEXT ALUMNE ── -->
+          <div class="field-wrap">
+            <div class="field-header">
+              <div class="field-label-row">
+                <div class="field-icon" style="background:rgba(255,209,102,.12);">✏️</div>
+                <span class="field-title">Resposta de l'alumne</span>
+              </div>
+              <span class="word-badge" id="alumne-count">0 paraules</span>
+            </div>
+
+            <div class="input-zone" id="iz-alumne"
+              ondragover="onDragOver(event,'iz-alumne')"
+              ondragleave="onDragLeave('iz-alumne')"
+              ondrop="onDrop(event,'iz-alumne','alumne')">
+
+              <div class="drag-overlay">
+                <div class="drag-icon">📂</div>
+                <div class="drag-label">Deixa anar el fitxer</div>
+                <div class="drag-sub">PDF · DOCX · TXT</div>
+              </div>
+
+              <div class="mode-text" id="mt-alumne">
+                <div class="text-placeholder" id="ph-alumne">
+                  <div class="ph-icon">✏️</div>
+                  <div class="ph-title">Escriu o enganxa aquí</div>
+                  <div class="ph-sub">o arrossega / adjunta un fitxer</div>
+                  <div class="ph-tags">
+                    <span class="ph-tag">PDF</span>
+                    <span class="ph-tag">DOCX</span>
+                    <span class="ph-tag">TXT</span>
+                  </div>
+                </div>
+                <textarea class="main-ta" id="text-alumne"
+                  oninput="onTypeText('text-alumne','alumne-count','ph-alumne')"></textarea>
+              </div>
+
+              <div class="mode-file" id="mf-alumne">
+                <div class="file-card" id="fc-alumne">
+                  <div class="file-type-icon" id="fti-alumne"></div>
+                  <div class="file-info">
+                    <div class="file-name" id="fn-alumne">—</div>
+                    <div class="file-meta">
+                      <span class="file-meta-item" id="fs-alumne"></span>
+                      <span class="file-meta-item words" id="fw-alumne"></span>
+                    </div>
+                  </div>
+                </div>
+                <div class="file-status">
+                  <div class="file-status-dot"></div>
+                  Fitxer llegit · contingut enviat a la IA internament
+                </div>
+              </div>
+
+              <div class="zone-footer">
+                <button class="btn-attach" onclick="triggerPick('fp-alumne')">📎 Adjuntar fitxer</button>
+                <button class="btn-clear" id="bc-alumne" onclick="clearZone('iz-alumne','text-alumne','alumne-count','ph-alumne')">✕ Treure</button>
+                <span class="footer-hint" id="fh-alumne">arrossega o adjunta</span>
+              </div>
+              <input type="file" id="fp-alumne" accept=".txt,.pdf,.docx,.doc" style="display:none"
+                onchange="onFilePick(event,'iz-alumne','alumne','alumne-count','ph-alumne')">
+            </div>
+          </div>
+
+        </div><!-- /fields-grid -->
+
+        <div class="submit-wrap">
+          <button class="btn-main" id="btn-corregir" onclick="corregir()">
+            <span>⚡</span><span id="btn-text">Analitzar i Corregir</span>
+          </button>
+        </div>
+        <div class="privacy-note">🔒 Cap dada personal s'emmagatzema. El text s'envia directament a l'API de Gemini.</div>
+      </div>
+    </section>
+
+    <!-- LOADING -->
+    <section id="loading-section">
+      <div class="loading-emoji">🧠</div>
+      <div class="loader-ring"></div>
+      <div class="loading-title">Analitzant la resposta…</div>
+      <div class="loading-sub">La IA processa el text. Pot trigar entre 5 i 20 segons.</div>
+      <div class="loading-bar-wrap"><div class="loading-bar"></div></div>
+    </section>
+
+    <!-- RESULTATS -->
+    <section id="results-section">
+      <div class="results-header anim-fade-in">
+        <div class="results-title">📊 Informe de Correcció</div>
+        <div class="results-meta">
+          <div class="meta-badge" id="model-badge"></div>
+          <button class="btn-back" onclick="novaCorreccio()">← Nova correcció</button>
+        </div>
+      </div>
+      <div id="nota-card" class="nota-card nota-alta anim-slide-up">
+        <div class="nota-label">✦ Nota Estimada ✦</div>
+        <div><span class="nota-number" id="nota-numero">—</span><span class="nota-denom">/10</span></div>
+        <div class="nota-emoji" id="nota-emoji">🎉</div>
+      </div>
+      <div class="resum-card anim-slide-up d1">
+        <div class="res-card-header">
+          <div class="res-card-icon" style="background:rgba(255,209,102,.12);font-size:18px;">📝</div>
+          <div class="res-card-title" style="color:var(--c-yellow);">Resum General</div>
+        </div>
+        <div class="resum-text" id="resum-general"></div>
+      </div>
+      <div class="results-grid">
+        <div class="res-card card-green anim-slide-up d1">
+          <div class="res-card-header">
+            <div class="res-card-icon">✅</div>
+            <div class="res-card-title">Punts Forts</div>
+          </div>
+          <ul class="res-list" id="punts-forts"></ul>
+        </div>
+        <div class="res-card card-orange anim-slide-up d2">
+          <div class="res-card-header">
+            <div class="res-card-icon">🎯</div>
+            <div class="res-card-title">Àrees de Millora</div>
+          </div>
+          <ul class="res-list" id="arees-millora"></ul>
+        </div>
+      </div>
+      <div class="consell-card anim-slide-up d3">
+        <div class="consell-header">
+          <div class="consell-icon">💬</div>
+          <div class="consell-title">Consell Motivador</div>
+        </div>
+        <div class="consell-text" id="consell-motivador"></div>
+      </div>
+      <button class="cta-new" onclick="novaCorreccio()">＋ &nbsp;Corregir un altre text</button>
+    </section>
+
+  </div>
+  <footer>Web Docent · Eina local per a docents · Powered by Google Gemini · Cap dada emmagatzemada</footer>
+
+<script>
+// ── PDF.js worker ──────────────────────────────────────────────────────────
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+// ── Estat intern dels camps ────────────────────────────────────────────────
+// Guardem el text extret de manera invisible
+const extracted = { rubrica: '', alumne: '' };
+const hasFile   = { rubrica: false, alumne: false };
+
+// ── Models ────────────────────────────────────────────────────────────────
+const MODELS = [
+  { id:'gemini-2.0-flash',               nom:'Flash 2.0', speed:'fast',   icon:'⚡' },
+  { id:'gemini-1.5-flash',               nom:'Flash 1.5', speed:'fast',   icon:'⚡' },
+  { id:'gemini-1.5-pro',                 nom:'Pro 1.5',   speed:'slow',   icon:'🧠' },
+  { id:'gemini-2.0-flash-thinking-exp',  nom:'Thinking',  speed:'medium', icon:'💭' },
+  { id:'gemini-2.5-flash-preview-05-20', nom:'Flash 2.5', speed:'fast',   icon:'🚀' },
+];
+let modelActiu = MODELS[0].id;
+
+function renderModels() {
+  const row = document.getElementById('model-row');
+  row.innerHTML = '';
+  MODELS.forEach(m => {
+    const btn = document.createElement('button');
+    btn.className = 'model-btn' + (m.id === modelActiu ? ' active' : '');
+    btn.innerHTML = `<span>${m.icon}</span><span>${m.nom}</span><span class="speed-tag speed-${m.speed}">${m.speed}</span>`;
+    btn.onclick = () => { modelActiu = m.id; renderModels(); };
+    row.appendChild(btn);
+  });
+}
+renderModels();
+
+// ── Toast ────────────────────────────────────────────────────────────────
+function toast(msg, type = 'error') {
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 4200);
+}
+function show(id) { document.getElementById(id).style.display = ''; }
+function hide(id) { document.getElementById(id).style.display = 'none'; }
+function countWords(t) { return t.trim() === '' ? 0 : t.trim().split(/\s+/).length; }
+function fmtSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes/1024).toFixed(1) + ' KB';
+  return (bytes/1048576).toFixed(1) + ' MB';
+}
+
+// ── Escriptura manual ────────────────────────────────────────────────────
+function onTypeText(taId, countId, phId) {
+  const val = document.getElementById(taId).value;
+  const n   = countWords(val);
+  const badge = document.getElementById(countId);
+  badge.textContent = n + ' paraules';
+  badge.className   = 'word-badge' + (n > 0 ? ' has-words' : '');
+  document.getElementById(phId).classList.toggle('hidden', val.length > 0);
+  // actualitza extracted
+  const key = taId === 'rubrica' ? 'rubrica' : 'alumne';
+  if (!hasFile[key]) extracted[key] = val;
+}
+
+// ── Drag & Drop ──────────────────────────────────────────────────────────
+function onDragOver(e, izId) {
+  e.preventDefault();
+  document.getElementById(izId).classList.add('drag-over');
+}
+function onDragLeave(izId) {
+  document.getElementById(izId).classList.remove('drag-over');
+}
+function onDrop(e, izId, key) {
+  e.preventDefault();
+  document.getElementById(izId).classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) loadFile(file, izId, key);
+}
+function onFilePick(e, izId, key, countId, phId) {
+  const file = e.target.files[0];
+  if (file) loadFile(file, izId, key);
+  e.target.value = '';
+}
+function triggerPick(inputId) {
+  document.getElementById(inputId).click();
+}
+
+// ── Carregar fitxer ───────────────────────────────────────────────────────
+async function loadFile(file, izId, key) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  toast(`⏳ Llegint ${file.name}…`, 'info');
+
+  try {
+    let text = '';
+    if      (ext === 'txt')  text = await readTxt(file);
+    else if (ext === 'pdf')  text = await readPdf(file);
+    else if (ext === 'docx' || ext === 'doc') text = await readDocx(file);
+    else { toast(`❌ Format no suportat: .${ext} (usa PDF, DOCX o TXT)`); return; }
+
+    text = text.trim();
+    if (!text) { toast('⚠️ El fitxer sembla buit o no s\'ha pogut extreure text.'); return; }
+
+    // Guardem text de manera invisible
+    extracted[key] = text;
+    hasFile[key]   = true;
+
+    const wc       = countWords(text);
+    const countId  = key === 'rubrica' ? 'rubrica-count' : 'alumne-count';
+
+    // Actualitza badge
+    const badge = document.getElementById(countId);
+    badge.textContent = wc + ' paraules';
+    badge.className   = 'word-badge has-words';
+
+    // Mostra targeta del fitxer
+    showFileCard(izId, key, file, ext, wc);
+    toast(`✅ ${file.name} llegit correctament (${wc} paraules)`, 'success');
+
+  } catch (err) {
+    toast(`❌ Error llegint el fitxer: ${err.message}`);
+    console.error(err);
+  }
+}
+
+// ── Mostra la targeta del fitxer (amaga textarea) ──────────────────────
+function showFileCard(izId, key, file, ext, wordCount) {
+  // Amaga mode text, mostra mode fitxer
+  document.getElementById(`mt-${key}`).style.display = 'none';
+  const mf = document.getElementById(`mf-${key}`);
+  mf.style.display = 'flex';
+
+  // Icona per tipus
+  const iconMap = { pdf:'🔴', docx:'🔵', doc:'🔵', txt:'⚪' };
+  const bgMap   = { pdf:'rgba(239,68,68,.15)', docx:'rgba(76,201,240,.15)', doc:'rgba(76,201,240,.15)', txt:'rgba(255,255,255,.08)' };
+  const fti = document.getElementById(`fti-${key}`);
+  fti.textContent = iconMap[ext] || '📄';
+  fti.style.background = bgMap[ext] || 'rgba(255,255,255,.08)';
+
+  document.getElementById(`fn-${key}`).textContent = file.name;
+  document.getElementById(`fs-${key}`).textContent = fmtSize(file.size);
+  document.getElementById(`fw-${key}`).textContent = wordCount + ' paraules';
+
+  // Footer: mostra botó "Treure", amaga hint
+  document.getElementById(`bc-${key}`).style.display = 'flex';
+  document.getElementById(`fh-${key}`).style.display = 'none';
+
+  // Dona focus a la zona (estètic)
+  document.getElementById(izId).classList.remove('drag-over');
+}
+
+// ── Netejar zona ─────────────────────────────────────────────────────────
+function clearZone(izId, taId, countId, phId) {
+  const key = taId === 'rubrica' ? 'rubrica' : 'alumne';
+
+  extracted[key] = '';
+  hasFile[key]   = false;
+
+  // Restaura mode text
+  document.getElementById(`mt-${key}`).style.display = 'flex';
+  document.getElementById(`mf-${key}`).style.display = 'none';
+  document.getElementById(taId).value = '';
+
+  const badge = document.getElementById(countId);
+  badge.textContent = '0 paraules';
+  badge.className   = 'word-badge';
+
+  document.getElementById(phId).classList.remove('hidden');
+  document.getElementById(`bc-${key}`).style.display = 'none';
+  document.getElementById(`fh-${key}`).style.display = '';
+}
+
+// ── Parsers de fitxers ───────────────────────────────────────────────────
+function readTxt(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload  = e => res(e.target.result);
+    r.onerror = () => rej(new Error('Error llegint TXT'));
+    r.readAsText(file, 'UTF-8');
+  });
+}
+
+async function readPdf(file) {
+  if (!window.pdfjsLib) throw new Error('PDF.js no disponible');
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  let out = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const ct   = await page.getTextContent();
+    out += ct.items.map(x => x.str).join(' ') + '\n\n';
+  }
+  return out;
+}
+
+async function readDocx(file) {
+  if (!window.mammoth) throw new Error('Mammoth.js no disponible');
+  const buf    = await file.arrayBuffer();
+  const result = await mammoth.extractRawText({ arrayBuffer: buf });
+  return result.value;
+}
+
+// ── Obtenir contingut d'un camp (fitxer o textarea) ──────────────────────
+function getContent(key) {
+  if (hasFile[key]) return extracted[key];
+  const taId = key === 'rubrica' ? 'rubrica' : 'text-alumne';
+  return document.getElementById(taId).value.trim();
+}
+
+// ── Corregir ─────────────────────────────────────────────────────────────
+async function corregir() {
+  const rubrica    = getContent('rubrica');
+  const textAlumne = getContent('alumne');
+
+  if (!rubrica)    { toast('⚠️ Afegeix la rúbrica (escriu o adjunta un fitxer).'); return; }
+  if (!textAlumne) { toast('⚠️ Afegeix la resposta de l\'alumne.'); return; }
+
+  hide('form-section');
+  hide('results-section');
+  show('loading-section');
+
+  const btn = document.getElementById('btn-corregir');
+  btn.disabled = true;
+  document.getElementById('btn-text').textContent = 'Processant…';
+
+  try {
+    const res = await fetch('/api/corregir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rubrica, text_alumne: textAlumne, model: modelActiu })
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || `Error HTTP ${res.status}`);
+    }
+    mostrarResultats(await res.json());
+  } catch (err) {
+    hide('loading-section');
+    show('form-section');
+    toast(`❌ ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    document.getElementById('btn-text').textContent = 'Analitzar i Corregir';
+  }
+}
+
+// ── Mostrar resultats ─────────────────────────────────────────────────────
+function mostrarResultats(data) {
+  const raw   = data.nota_estimada;
+  const match = raw.match(/(\d+(?:[.,]\d+)?)/);
+  const num   = match ? parseFloat(match[1].replace(',', '.')) : null;
+
+  document.getElementById('nota-numero').textContent = raw.split('/')[0].trim();
+  const card = document.getElementById('nota-card');
+  let emoji  = '😊';
+  card.className = 'nota-card anim-slide-up';
+  if (num !== null) {
+    if      (num >= 7) { card.classList.add('nota-alta');  emoji = num >= 9 ? '🏆':'🎉'; }
+    else if (num >= 5) { card.classList.add('nota-mitja'); emoji = '📈'; }
+    else               { card.classList.add('nota-baixa'); emoji = '💪'; }
+  } else { card.classList.add('nota-mitja'); }
+  document.getElementById('nota-emoji').textContent  = emoji;
+  document.getElementById('resum-general').textContent = data.resum_general;
+
+  const pfList = document.getElementById('punts-forts');
+  pfList.innerHTML = '';
+  (data.punts_forts||[]).forEach((p,i) => {
+    const li = document.createElement('li');
+    li.className = 'res-item anim-fade-in'; li.style.animationDelay = `${i*.07}s`;
+    li.innerHTML = `<span class="res-bullet bullet-green">✓</span><span>${p}</span>`;
+    pfList.appendChild(li);
+  });
+  const amList = document.getElementById('arees-millora');
+  amList.innerHTML = '';
+  (data.arees_millora||[]).forEach((a,i) => {
+    const li = document.createElement('li');
+    li.className = 'res-item anim-fade-in'; li.style.animationDelay = `${i*.07}s`;
+    li.innerHTML = `<span class="res-bullet bullet-orange">→</span><span>${a}</span>`;
+    amList.appendChild(li);
+  });
+
+  document.getElementById('consell-motivador').textContent = data.consell_motivador;
+  const mInfo = MODELS.find(m => m.id === data.model_usat)||{icon:'🤖',nom:data.model_usat};
+  document.getElementById('model-badge').textContent = `${mInfo.icon} ${mInfo.nom}`;
+
+  hide('loading-section');
+  show('results-section');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  toast('✅ Correcció completada!', 'success');
+}
+
+// ── Nova correcció ────────────────────────────────────────────────────────
+function novaCorreccio() {
+  hide('results-section');
+  show('form-section');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+</script>
+</body>
+</html>
