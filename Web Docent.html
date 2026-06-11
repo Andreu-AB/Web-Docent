@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="ca" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Web Docent — Correcció Intel·ligent d'Exàmens</title>
+  <meta name="description" content="Eina per a docents que automatitza el feedback d'exàmens amb IA preservant la privacitat." />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'sans-serif'],
+            mono: ['Space Grotesk', 'monospace'],
+          },
+        }
+      }
+    }
+  </script>
+
+  <style>
+    :root {
+      --bg-base:    #0d0d18;
+      --bg-card:    #13131f;
+      --bg-card2:   #191928;
+      --border:     rgba(255,255,255,0.07);
+      --text-muted: rgba(255,255,255,0.45);
+
+      --c-orange:  #ff7b54;
+      --c-yellow:  #ffd166;
+      --c-green:   #06d6a0;
+      --c-blue:    #4cc9f0;
+      --c-purple:  #b388ff;
+      --c-pink:    #f72585;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0; padding: 0;
+      min-height: 100vh;
+      background: var(--bg-base);
+      color: #fff;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      overflow-x: hidden;
+    }
+
+    /* ── ANIMATED BG ─────────────────────────────────────────── */
+    .bg-orbs {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+    }
+    .orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(80px);
+      opacity: 0.18;
+      animation: float 12s ease-in-out infinite alternate;
+    }
+    .orb-1 { width:500px; height:500px; background: radial-gradient(circle, #7b2ff7, transparent); top:-150px; left:-100px; animation-duration:15s; }
+    .orb-2 { width:400px; height:400px; background: radial-gradient(circle, #ff7b54, transparent); top:30%; right:-120px; animation-duration:12s; animation-delay:-4s; }
+    .orb-3 { width:450px; height:450px; background: radial-gradient(circle, #4cc9f0, transparent); bottom:-100px; left:20%; animation-duration:18s; animation-delay:-8s; }
+    .orb-4 { width:300px; height:300px; background: radial-gradient(circle, #06d6a0, transparent); top:60%; left:60%; animation-duration:10s; animation-delay:-2s; }
+
+    @keyframes float {
+      from { transform: translate(0,0) scale(1); }
+      to   { transform: translate(30px, -40px) scale(1.08); }
+    }
+
+    /* ── LAYOUT ──────────────────────────────────────────────── */
+    .page { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; padding: 0 24px 80px; }
+
+    /* ── HEADER ──────────────────────────────────────────────── */
+    header {
+      position: sticky; top: 0; z-index: 100;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      background: rgba(13,13,24,0.75);
+      border-bottom: 1px solid var(--border);
+    }
+    .header-inner {
+      max-width: 900px; margin: 0 auto;
+      padding: 14px 24px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo-mark {
+      width: 40px; height: 40px; border-radius: 14px;
+      background: linear-gradient(135deg, #7b2ff7, #ff7b54);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; font-weight: 900; color: #fff;
+      box-shadow: 0 0 20px rgba(123,47,247,0.5);
+      flex-shrink: 0;
+    }
+    .logo-text { font-size: 17px; font-weight: 800; letter-spacing: -0.5px; }
+    .logo-text span { background: linear-gradient(90deg, #b388ff, #ff7b54); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .status-pill {
+      display: flex; align-items: center; gap: 7px;
+      background: rgba(6,214,160,0.1); border: 1px solid rgba(6,214,160,0.25);
+      border-radius: 100px; padding: 5px 12px;
+      font-size: 12px; color: #06d6a0; font-weight: 600;
+    }
+    .status-dot { width: 7px; height: 7px; background: #06d6a0; border-radius: 50%; animation: pulse-g 2s infinite; }
+    @keyframes pulse-g { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)} }
+
+    /* ── HERO ────────────────────────────────────────────────── */
+    .hero { text-align: center; padding: 60px 0 48px; }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(179,136,255,0.1); border: 1px solid rgba(179,136,255,0.25);
+      border-radius: 100px; padding: 6px 16px;
+      font-size: 12px; font-weight: 700; color: var(--c-purple);
+      text-transform: uppercase; letter-spacing: 1px;
+      margin-bottom: 28px;
+    }
+    .hero h1 {
+      font-size: clamp(36px, 6vw, 58px);
+      font-weight: 900; line-height: 1.1;
+      letter-spacing: -2px;
+      margin: 0 0 20px;
+    }
+    .hero h1 .line2 {
+      background: linear-gradient(90deg, #ff7b54, #ffd166, #06d6a0);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .hero p {
+      font-size: 17px; color: var(--text-muted);
+      max-width: 520px; margin: 0 auto; line-height: 1.7;
+    }
+    .hero-pills { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 24px; }
+    .pill {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 100px; padding: 6px 14px;
+      font-size: 12px; font-weight: 600; color: var(--text-muted);
+    }
+    .pill-dot { width: 6px; height: 6px; border-radius: 50%; }
+
+    /* ── CARD ────────────────────────────────────────────────── */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 32px;
+      transition: border-color 0.3s;
+    }
+    .card:hover { border-color: rgba(255,255,255,0.12); }
+
+    /* ── SECTION LABEL ───────────────────────────────────────── */
+    .section-label {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 11px; font-weight: 800;
+      text-transform: uppercase; letter-spacing: 1.5px;
+      color: var(--text-muted); margin-bottom: 12px;
+    }
+    .section-label .icon-badge {
+      width: 28px; height: 28px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; flex-shrink: 0;
+    }
+
+    /* ── MODEL SELECTOR ──────────────────────────────────────── */
+    .model-row { display: flex; gap: 10px; align-items: center; margin-bottom: 28px; flex-wrap: wrap; }
+    .model-btn {
+      display: flex; align-items: center; gap: 8px;
+      padding: 9px 16px; border-radius: 12px;
+      border: 1.5px solid var(--border);
+      background: var(--bg-card2); color: var(--text-muted);
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      transition: all 0.2s; font-family: inherit;
+    }
+    .model-btn:hover { border-color: rgba(179,136,255,0.4); color: var(--c-purple); background: rgba(179,136,255,0.07); }
+    .model-btn.active {
+      border-color: var(--c-purple); color: var(--c-purple);
+      background: rgba(179,136,255,0.12);
+      box-shadow: 0 0 20px rgba(179,136,255,0.15);
+    }
+    .model-speed { font-size: 9px; background: rgba(179,136,255,0.15); color: var(--c-purple); border-radius: 6px; padding: 2px 6px; font-weight: 700; }
+    .model-speed.fast { background: rgba(6,214,160,0.15); color: var(--c-green); }
+    .model-speed.slow { background: rgba(255,123,84,0.15); color: var(--c-orange); }
+
+    /* ── TEXTAREAS ───────────────────────────────────────────── */
+    .fields-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media(max-width:640px) { .fields-grid { grid-template-columns: 1fr; } }
+
+    .field-wrap { display: flex; flex-direction: column; }
+    .field-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .field-label {
+      font-size: 13px; font-weight: 800; letter-spacing: -0.2px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .field-icon {
+      width: 30px; height: 30px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center; font-size: 15px;
+    }
+    .word-count { font-size: 12px; font-weight: 600; color: var(--text-muted); background: var(--bg-card2); border-radius: 8px; padding: 3px 9px; }
+
+    textarea {
+      flex: 1; min-height: 220px;
+      background: var(--bg-card2);
+      border: 1.5px solid var(--border);
+      border-radius: 16px;
+      color: #fff; font-family: inherit; font-size: 14px; line-height: 1.7;
+      padding: 16px; resize: vertical;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    textarea::placeholder { color: rgba(255,255,255,0.2); }
+    textarea:focus { outline: none; border-color: rgba(179,136,255,0.5); box-shadow: 0 0 0 4px rgba(179,136,255,0.08); }
+
+    /* ── SUBMIT BTN ──────────────────────────────────────────── */
+    .submit-wrap { display: flex; justify-content: center; margin-top: 28px; }
+    .btn-main {
+      display: flex; align-items: center; gap: 10px;
+      background: linear-gradient(135deg, #7b2ff7 0%, #ff7b54 100%);
+      color: #fff; border: none; cursor: pointer;
+      font-size: 16px; font-weight: 800; letter-spacing: -0.3px;
+      padding: 16px 40px; border-radius: 18px;
+      box-shadow: 0 8px 32px rgba(123,47,247,0.35);
+      transition: all 0.25s; font-family: inherit;
+      position: relative; overflow: hidden;
+    }
+    .btn-main::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, #ff7b54 0%, #7b2ff7 100%);
+      opacity: 0; transition: opacity 0.3s;
+    }
+    .btn-main:hover:not(:disabled)::before { opacity: 1; }
+    .btn-main:hover:not(:disabled) { transform: translateY(-3px); box-shadow: 0 14px 40px rgba(123,47,247,0.45); }
+    .btn-main:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-main span { position: relative; z-index: 1; }
+
+    .privacy-note { text-align: center; margin-top: 14px; font-size: 12px; color: rgba(255,255,255,0.25); display: flex; align-items: center; justify-content: center; gap: 6px; }
+
+    /* ── LOADING ─────────────────────────────────────────────── */
+    #loading-section { display: none; text-align: center; padding: 80px 0; }
+    .loader-ring {
+      width: 80px; height: 80px; border-radius: 50%; margin: 0 auto 28px;
+      border: 3px solid rgba(255,255,255,0.05);
+      border-top-color: var(--c-purple);
+      border-right-color: var(--c-orange);
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-emoji { font-size: 32px; margin-bottom: 16px; animation: bounce 1s ease-in-out infinite alternate; }
+    @keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-10px); } }
+    .loading-title { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 8px; }
+    .loading-sub { font-size: 14px; color: var(--text-muted); }
+    .loading-bar-wrap { width: 200px; height: 4px; background: rgba(255,255,255,0.06); border-radius: 100px; margin: 20px auto 0; overflow: hidden; }
+    .loading-bar { height: 100%; background: linear-gradient(90deg, var(--c-purple), var(--c-orange)); border-radius: 100px; animation: loadbar 2s ease-in-out infinite alternate; }
+    @keyframes loadbar { from { width: 10%; } to { width: 90%; } }
+
+    /* ── RESULTS ─────────────────────────────────────────────── */
+    #results-section { display: none; }
+    .results-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+    .results-title { font-size: 24px; font-weight: 900; letter-spacing: -0.5px; }
+    .results-meta { display: flex; align-items: center; gap: 10px; }
+    .meta-badge {
+      font-size: 12px; font-weight: 700; padding: 5px 12px; border-radius: 100px;
+      background: rgba(179,136,255,0.12); border: 1px solid rgba(179,136,255,0.25); color: var(--c-purple);
+    }
+    .btn-back {
+      display: flex; align-items: center; gap: 7px;
+      font-size: 13px; font-weight: 700; cursor: pointer;
+      background: var(--bg-card); border: 1.5px solid var(--border);
+      color: var(--text-muted); padding: 8px 16px; border-radius: 12px;
+      transition: all 0.2s; font-family: inherit;
+    }
+    .btn-back:hover { border-color: rgba(255,255,255,0.15); color: #fff; }
+
+    /* ── NOTA CARD ───────────────────────────────────────────── */
+    .nota-card {
+      border-radius: 24px; padding: 32px;
+      text-align: center; margin-bottom: 20px;
+      position: relative; overflow: hidden;
+    }
+    .nota-card::before {
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(ellipse at top, rgba(255,255,255,0.08), transparent 60%);
+    }
+    .nota-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; opacity: 0.7; margin-bottom: 12px; }
+    .nota-number { font-size: 72px; font-weight: 900; line-height: 1; letter-spacing: -4px; }
+    .nota-denom { font-size: 28px; font-weight: 600; opacity: 0.6; }
+    .nota-emoji { font-size: 28px; margin-top: 8px; }
+
+    .nota-alta  { background: linear-gradient(135deg, #065f46, #059669); border: 1px solid rgba(6,214,160,0.3); }
+    .nota-mitja { background: linear-gradient(135deg, #78350f, #d97706); border: 1px solid rgba(251,191,36,0.3); }
+    .nota-baixa { background: linear-gradient(135deg, #7f1d1d, #dc2626); border: 1px solid rgba(248,113,113,0.3); }
+
+    /* ── RESULT CARDS GRID ───────────────────────────────────── */
+    .results-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    @media(max-width:600px) { .results-grid { grid-template-columns: 1fr; } }
+
+    .res-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 20px; padding: 24px;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .res-card:hover { transform: translateY(-2px); border-color: rgba(255,255,255,0.12); }
+
+    .res-card-header {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
+    }
+    .res-card-icon {
+      width: 36px; height: 36px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;
+    }
+    .res-card-title { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; }
+
+    /* Punts forts */
+    .card-green .res-card-icon { background: rgba(6,214,160,0.15); }
+    .card-green .res-card-title { color: var(--c-green); }
+    /* Àrees millora */
+    .card-orange .res-card-icon { background: rgba(255,123,84,0.15); }
+    .card-orange .res-card-title { color: var(--c-orange); }
+
+    .res-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+    .res-item { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; color: rgba(255,255,255,0.75); line-height: 1.55; }
+    .res-bullet {
+      width: 22px; height: 22px; border-radius: 8px; flex-shrink: 0; margin-top: 1px;
+      display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800;
+    }
+    .bullet-green { background: rgba(6,214,160,0.15); color: var(--c-green); }
+    .bullet-orange { background: rgba(255,123,84,0.15); color: var(--c-orange); }
+
+    /* ── RESUM ───────────────────────────────────────────────── */
+    .resum-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 20px; padding: 24px; margin-bottom: 16px;
+    }
+    .resum-text { font-size: 15px; line-height: 1.75; color: rgba(255,255,255,0.75); }
+
+    /* ── CONSELL ─────────────────────────────────────────────── */
+    .consell-card {
+      border-radius: 20px; padding: 28px;
+      background: linear-gradient(135deg, rgba(76,201,240,0.1), rgba(123,47,247,0.1));
+      border: 1px solid rgba(76,201,240,0.2);
+      position: relative; overflow: hidden; margin-bottom: 28px;
+    }
+    .consell-card::after {
+      content: '✨';
+      position: absolute; right: 20px; bottom: 20px;
+      font-size: 40px; opacity: 0.15;
+    }
+    .consell-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .consell-icon { width: 36px; height: 36px; border-radius: 12px; background: rgba(76,201,240,0.15); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+    .consell-title { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: var(--c-blue); }
+    .consell-text { font-size: 16px; line-height: 1.7; color: rgba(255,255,255,0.85); font-style: italic; font-weight: 500; }
+
+    /* ── CTA NEW ─────────────────────────────────────────────── */
+    .cta-new {
+      text-align: center; padding: 28px;
+      background: var(--bg-card); border: 1.5px dashed rgba(255,255,255,0.1);
+      border-radius: 20px; cursor: pointer; transition: all 0.2s;
+      font-family: inherit;
+      color: var(--text-muted); font-size: 15px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      width: 100%;
+    }
+    .cta-new:hover { border-color: rgba(179,136,255,0.3); color: var(--c-purple); background: rgba(179,136,255,0.05); transform: translateY(-2px); }
+
+    /* ── TOAST ───────────────────────────────────────────────── */
+    #toast-container { position: fixed; top: 80px; right: 20px; z-index: 999; display: flex; flex-direction: column; gap: 8px; }
+    .toast {
+      padding: 12px 18px; border-radius: 14px; font-size: 14px; font-weight: 600;
+      backdrop-filter: blur(12px); border: 1px solid;
+      animation: toastIn 0.3s ease-out both;
+      max-width: 320px;
+    }
+    .toast-error   { background: rgba(220,38,38,0.2);  border-color: rgba(220,38,38,0.35);  color: #fca5a5; }
+    .toast-success { background: rgba(6,214,160,0.15); border-color: rgba(6,214,160,0.3);   color: #6ee7b7; }
+    @keyframes toastIn { from { opacity:0; transform: translateX(20px); } to { opacity:1; transform: translateX(0); } }
+
+    /* ── MISC ────────────────────────────────────────────────── */
+    .anim-fade-in  { animation: aFadeIn 0.5s ease-out both; }
+    .anim-slide-up { animation: aSlideUp 0.5s ease-out both; }
+    @keyframes aFadeIn  { from { opacity:0; } to { opacity:1; } }
+    @keyframes aSlideUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+
+    .stagger-1 { animation-delay: 0.05s; }
+    .stagger-2 { animation-delay: 0.10s; }
+    .stagger-3 { animation-delay: 0.15s; }
+
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: var(--bg-base); }
+    ::-webkit-scrollbar-thumb { background: #2a2a40; border-radius: 10px; }
+
+    footer { position: relative; z-index: 1; text-align: center; padding: 24px; font-size: 12px; color: rgba(255,255,255,0.18); }
+  </style>
+</head>
+
+<body>
+
+  <!-- Orbs de fons -->
+  <div class="bg-orbs">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+    <div class="orb orb-4"></div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast-container"></div>
+
+  <!-- ── HEADER ── -->
+  <header>
+    <div class="header-inner">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div class="logo-mark">W</div>
+        <div>
+          <div class="logo-text"><span>Web Docent</span></div>
+          <div style="font-size:11px;color:var(--text-muted);font-weight:600;">Correcció intel·ligent</div>
+        </div>
+      </div>
+      <div class="status-pill">
+        <div class="status-dot"></div>
+        Servei actiu
+      </div>
+    </div>
+  </header>
+
+  <!-- ── PAGE ── -->
+  <div class="page">
+
+    <!-- HERO -->
+    <section class="hero anim-fade-in">
+      <div class="hero-badge">
+        🎓 Eina per a docents · IA generativa
+      </div>
+      <h1>
+        Feedback de qualitat,<br>
+        <span class="line2">sense perdre el temps.</span>
+      </h1>
+      <p>
+        Enganxa la rúbrica i la resposta de l'alumne.
+        La IA genera un informe complet en segons — constructiu, motivador i en català.
+      </p>
+      <div class="hero-pills">
+        <div class="pill"><span class="pill-dot" style="background:var(--c-green)"></span>Privacitat garantida</div>
+        <div class="pill"><span class="pill-dot" style="background:var(--c-blue)"></span>100% local</div>
+        <div class="pill"><span class="pill-dot" style="background:var(--c-orange)"></span>Feedback estructurat</div>
+        <div class="pill"><span class="pill-dot" style="background:var(--c-purple)"></span>Multi-model Gemini</div>
+      </div>
+    </section>
+
+    <!-- ── FORMULARI ── -->
+    <section id="form-section" class="anim-slide-up">
+      <div class="card">
+
+        <!-- Model selector -->
+        <div style="margin-bottom:28px;">
+          <div class="section-label">
+            <div class="icon-badge" style="background:rgba(179,136,255,0.1);">🤖</div>
+            Model de IA
+          </div>
+          <div class="model-row" id="model-row">
+            <!-- Injectat per JS -->
+          </div>
+        </div>
+
+        <!-- Camps de text -->
+        <div class="fields-grid">
+
+          <!-- Rúbrica -->
+          <div class="field-wrap">
+            <div class="field-header">
+              <div class="field-label">
+                <div class="field-icon" style="background:rgba(76,201,240,0.12);">📋</div>
+                Rúbrica / Criteris
+              </div>
+              <div class="word-count" id="rubrica-count">0 paraules</div>
+            </div>
+            <textarea
+              id="rubrica"
+              placeholder="Exemples de criteris:
+• Comprensió del tema: 3 pts
+• Argumentació: 3 pts
+• Vocabulari: 2 pts
+• Exemples i evidències: 2 pts
+
+Enganxa aquí els teus criteris..."
+            ></textarea>
+          </div>
+
+          <!-- Text alumne -->
+          <div class="field-wrap">
+            <div class="field-header">
+              <div class="field-label">
+                <div class="field-icon" style="background:rgba(255,209,102,0.12);">✏️</div>
+                Resposta de l'alumne
+              </div>
+              <div class="word-count" id="alumne-count">0 paraules</div>
+            </div>
+            <textarea
+              id="text-alumne"
+              placeholder="Enganxa aquí el text de l'alumne.
+
+💡 Consell: elimina el nom i dades personals per preservar la privacitat."
+            ></textarea>
+          </div>
+        </div>
+
+        <!-- Botó -->
+        <div class="submit-wrap">
+          <button class="btn-main" id="btn-corregir" onclick="corregir()">
+            <span>⚡</span>
+            <span id="btn-text">Analitzar i Corregir</span>
+          </button>
+        </div>
+        <div class="privacy-note">
+          <span>🔒</span> Cap dada personal s'emmagatzema. El text s'envia directament a l'API de Gemini.
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── LOADING ── -->
+    <section id="loading-section">
+      <div class="loading-emoji">🧠</div>
+      <div class="loader-ring"></div>
+      <div class="loading-title">Analitzant la resposta…</div>
+      <div class="loading-sub">La IA està processant el text. Pot trigar entre 5 i 20 segons.</div>
+      <div class="loading-bar-wrap"><div class="loading-bar"></div></div>
+    </section>
+
+    <!-- ── RESULTATS ── -->
+    <section id="results-section">
+
+      <!-- Header -->
+      <div class="results-header anim-fade-in">
+        <div class="results-title">📊 Informe de Correcció</div>
+        <div class="results-meta">
+          <div class="meta-badge" id="model-badge"></div>
+          <button class="btn-back" onclick="novaCorreccio()">
+            ← Nova correcció
+          </button>
+        </div>
+      </div>
+
+      <!-- Nota gran -->
+      <div id="nota-card" class="nota-card nota-alta anim-slide-up">
+        <div class="nota-label">✦ Nota Estimada ✦</div>
+        <div>
+          <span class="nota-number" id="nota-numero">—</span>
+          <span class="nota-denom">/10</span>
+        </div>
+        <div class="nota-emoji" id="nota-emoji">🎉</div>
+      </div>
+
+      <!-- Resum -->
+      <div class="resum-card anim-slide-up stagger-1">
+        <div class="res-card-header">
+          <div class="res-card-icon" style="background:rgba(255,209,102,0.12);font-size:18px;">📝</div>
+          <div class="res-card-title" style="color:var(--c-yellow);">Resum General</div>
+        </div>
+        <div class="resum-text" id="resum-general"></div>
+      </div>
+
+      <!-- Punts forts + Àrees -->
+      <div class="results-grid">
+        <div class="res-card card-green anim-slide-up stagger-1">
+          <div class="res-card-header">
+            <div class="res-card-icon">✅</div>
+            <div class="res-card-title">Punts Forts</div>
+          </div>
+          <ul class="res-list" id="punts-forts"></ul>
+        </div>
+        <div class="res-card card-orange anim-slide-up stagger-2">
+          <div class="res-card-header">
+            <div class="res-card-icon">🎯</div>
+            <div class="res-card-title">Àrees de Millora</div>
+          </div>
+          <ul class="res-list" id="arees-millora"></ul>
+        </div>
+      </div>
+
+      <!-- Consell motivador -->
+      <div class="consell-card anim-slide-up stagger-3">
+        <div class="consell-header">
+          <div class="consell-icon">💬</div>
+          <div class="consell-title">Consell Motivador</div>
+        </div>
+        <div class="consell-text" id="consell-motivador"></div>
+      </div>
+
+      <!-- CTA nueva corrección -->
+      <button class="cta-new" onclick="novaCorreccio()">
+        <span style="font-size:20px;">＋</span>
+        Corregir un altre text
+      </button>
+
+    </section>
+
+  </div><!-- /page -->
+
+  <footer>Web Docent · Eina local per a docents · Powered by Google Gemini · Cap dada emmagatzemada</footer>
+
+  <!-- ── JAVASCRIPT ── -->
+  <script>
+    // ── Configuració models ──────────────────────────────────────────────────
+    const MODELS = [
+      { id: 'gemini-2.0-flash',                   nom: 'Flash 2.0',    speed: 'fast',   icon: '⚡' },
+      { id: 'gemini-1.5-flash',                   nom: 'Flash 1.5',    speed: 'fast',   icon: '⚡' },
+      { id: 'gemini-1.5-pro',                     nom: 'Pro 1.5',      speed: 'slow',   icon: '🧠' },
+      { id: 'gemini-2.0-flash-thinking-exp',      nom: 'Thinking',     speed: 'medium', icon: '💭' },
+      { id: 'gemini-2.5-flash-preview-05-20',     nom: 'Flash 2.5',    speed: 'fast',   icon: '🚀' },
+    ];
+    let modelActiu = MODELS[0].id;
+
+    function renderModels() {
+      const row = document.getElementById('model-row');
+      row.innerHTML = '';
+      MODELS.forEach(m => {
+        const btn = document.createElement('button');
+        btn.className = 'model-btn' + (m.id === modelActiu ? ' active' : '');
+        const speedClass = m.speed === 'fast' ? 'fast' : m.speed === 'slow' ? 'slow' : '';
+        btn.innerHTML = `<span>${m.icon}</span><span>${m.nom}</span><span class="model-speed ${speedClass}">${m.speed}</span>`;
+        btn.onclick = () => {
+          modelActiu = m.id;
+          renderModels();
+        };
+        row.appendChild(btn);
+      });
+    }
+    renderModels();
+
+    // ── Comptadors ───────────────────────────────────────────────────────────
+    function comptarParaules(id, targetId) {
+      const text = document.getElementById(id).value.trim();
+      const n = text === '' ? 0 : text.split(/\s+/).length;
+      document.getElementById(targetId).textContent = `${n} paraules`;
+    }
+    document.getElementById('rubrica').addEventListener('input', () => comptarParaules('rubrica', 'rubrica-count'));
+    document.getElementById('text-alumne').addEventListener('input', () => comptarParaules('text-alumne', 'alumne-count'));
+
+    // ── Toast ────────────────────────────────────────────────────────────────
+    function toast(msg, type = 'error') {
+      const el = document.createElement('div');
+      el.className = `toast toast-${type}`;
+      el.textContent = msg;
+      document.getElementById('toast-container').appendChild(el);
+      setTimeout(() => el.remove(), 4000);
+    }
+
+    // ── Seccions ─────────────────────────────────────────────────────────────
+    function show(id)  { document.getElementById(id).style.display = ''; }
+    function hide(id)  { document.getElementById(id).style.display = 'none'; }
+
+    // ── Corregir ─────────────────────────────────────────────────────────────
+    async function corregir() {
+      const rubrica    = document.getElementById('rubrica').value.trim();
+      const textAlumne = document.getElementById('text-alumne').value.trim();
+
+      if (!rubrica)    { toast('⚠️ Enganxa la rúbrica o criteris d\'avaluació.'); return; }
+      if (!textAlumne) { toast('⚠️ Enganxa el text de l\'alumne.'); return; }
+
+      hide('form-section');
+      hide('results-section');
+      show('loading-section');
+
+      const btn = document.getElementById('btn-corregir');
+      btn.disabled = true;
+      document.getElementById('btn-text').textContent = 'Processant…';
+
+      try {
+        const res = await fetch('/api/corregir', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rubrica, text_alumne: textAlumne, model: modelActiu })
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || `Error HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        mostrarResultats(data);
+
+      } catch (err) {
+        hide('loading-section');
+        show('form-section');
+        toast(`❌ ${err.message}`);
+      } finally {
+        btn.disabled = false;
+        document.getElementById('btn-text').textContent = 'Analitzar i Corregir';
+      }
+    }
+
+    // ── Mostrar resultats ────────────────────────────────────────────────────
+    function mostrarResultats(data) {
+      // ---- Nota
+      const raw = data.nota_estimada;
+      // Extreu número (e.g. "7.5/10" → 7.5, "8" → 8)
+      const match = raw.match(/(\d+(?:[.,]\d+)?)/);
+      const num   = match ? parseFloat(match[1].replace(',', '.')) : null;
+
+      // Número sense el "/10" si ja hi ve
+      const numStr = raw.replace('/10','').replace('/10','').trim();
+      document.getElementById('nota-numero').textContent = numStr.split('/')[0] || numStr;
+
+      const card = document.getElementById('nota-card');
+      let emoji = '😊';
+      card.className = 'nota-card anim-slide-up';
+      if (num !== null) {
+        if (num >= 8)       { card.classList.add('nota-alta');  emoji = '🎉'; }
+        else if (num >= 6)  { card.classList.add('nota-alta');  emoji = '👍'; }
+        else if (num >= 5)  { card.classList.add('nota-mitja'); emoji = '📈'; }
+        else                { card.classList.add('nota-baixa'); emoji = '💪'; }
+      } else {
+        card.classList.add('nota-mitja');
+      }
+      document.getElementById('nota-emoji').textContent = emoji;
+
+      // ---- Resum
+      document.getElementById('resum-general').textContent = data.resum_general;
+
+      // ---- Punts forts
+      const pfList = document.getElementById('punts-forts');
+      pfList.innerHTML = '';
+      (data.punts_forts || []).forEach((p, i) => {
+        const li = document.createElement('li');
+        li.className = 'res-item anim-fade-in';
+        li.style.animationDelay = `${i * 0.08}s`;
+        li.innerHTML = `<span class="res-bullet bullet-green">✓</span><span>${p}</span>`;
+        pfList.appendChild(li);
+      });
+
+      // ---- Àrees millora
+      const amList = document.getElementById('arees-millora');
+      amList.innerHTML = '';
+      (data.arees_millora || []).forEach((a, i) => {
+        const li = document.createElement('li');
+        li.className = 'res-item anim-fade-in';
+        li.style.animationDelay = `${i * 0.08}s`;
+        li.innerHTML = `<span class="res-bullet bullet-orange">→</span><span>${a}</span>`;
+        amList.appendChild(li);
+      });
+
+      // ---- Consell
+      document.getElementById('consell-motivador').textContent = data.consell_motivador;
+
+      // ---- Badge model
+      const modelInfo = MODELS.find(m => m.id === data.model_usat) || { icon: '🤖', nom: data.model_usat };
+      document.getElementById('model-badge').textContent = `${modelInfo.icon} ${modelInfo.nom}`;
+
+      // ---- Transició
+      hide('loading-section');
+      show('results-section');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      toast('✅ Correcció completada!', 'success');
+    }
+
+    // ── Nova correcció ───────────────────────────────────────────────────────
+    function novaCorreccio() {
+      hide('results-section');
+      show('form-section');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  </script>
+
+</body>
+</html>
